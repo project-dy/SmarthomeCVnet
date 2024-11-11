@@ -24,6 +24,14 @@ interface Bulb {
 
 let lights: Light[];
 
+// @ts-expect-error undefined[]
+const currentBrightnessRatio: {
+  [index: string]: number;
+} = []; // 밝기 조정가능 조명의 현재 밝기값(백분율%) 0 ~ 100%
+
+let control_light: (_rnum: string, _brightnessRatio: number) => void;
+let control_dimming: (_roomnum: string, _value: number) => void;
+
 async function light(
   server: string,
   id: string,
@@ -44,10 +52,6 @@ async function light(
   let remote_addr: string | null = null;
   let lightsPromiseResolve: any;
 
-  // @ts-expect-error undefined[]
-  const currentBrightnessRatio: {
-    [index: string]: number;
-  } = []; // 밝기 조정가능 조명의 현재 밝기값(백분율%) 0 ~ 100%
   let currentDimmingLightOnOff = 0;
   // @ts-expect-error undefined[]
   const light_onoff: {
@@ -470,7 +474,7 @@ async function light(
    ************************************************************************/
 
   // 개별 조명 제어....
-  function control_light(_rnum: string, _brightnessRatio: number) {
+  control_light = (_rnum: string, _brightnessRatio: number) => {
     const _roomnum = _rnum;
     const rnumValue = _roomnum.split("-");
     // const onoff;
@@ -524,10 +528,10 @@ async function light(
       json.zone = rnumValue[0] + "";
       wsClient.publish(address, JSON.stringify(json), null);
     }
-  }
+  };
 
   // 개별 조명 제어....
-  function control_dimming(_roomnum: string, _value: number) {
+  control_dimming = (_roomnum: string, _value: number) => {
     if (wsClient == null) {
       return;
     }
@@ -563,7 +567,7 @@ async function light(
       json.zone = rnum[0] + "";
       wsClient.publish(address, JSON.stringify(json), null);
     }
-  }
+  };
 
   // // 전체 조명 제어
   // function control_light_all(_onoff) {
@@ -630,8 +634,8 @@ async function getLights() {
     if (!bulbs) {
       bulbs = [
         {
-          // UniqueId: `Z${light.zone}N${light.number}`,
-          UniqueId: `ZAA${(index + 10).toString(36).toUpperCase()}`,
+          UniqueId: `Z${(light.zone + 10).toString(36).toUpperCase()}N${(light.number + 10).toString(36).toUpperCase()}`,
+          // UniqueId: `ZAA${(index + 10).toString(36).toUpperCase()}`,
           DisplayName: light.title,
           // DisplayName: `Light ${(index + 10).toString(36).toUpperCase()}`,
           Dimming: dimmable,
@@ -640,8 +644,8 @@ async function getLights() {
       return;
     }
     bulbs.push({
-      // UniqueId: `Z${light.zone}N${light.number}`,
-      UniqueId: `ZAA${(index + 10).toString(36).toUpperCase()}`,
+      UniqueId: `Z${(light.zone + 10).toString(36).toUpperCase()}N${(light.number + 10).toString(36).toUpperCase()}`,
+      // UniqueId: `ZAA${(index + 10).toString(36).toUpperCase()}`,
       DisplayName: light.title,
       // DisplayName: `Light ${(index + 10).toString(36).toUpperCase()}`,
       Dimming: dimmable,
@@ -650,5 +654,29 @@ async function getLights() {
   return bulbs;
 }
 
+async function isLightTurnedOn(uniqueId: string) {
+  const light = currentBrightnessRatio[uniqueId];
+  console.log(`Light ${uniqueId} is turned ${light > 0 ? "on" : "off"}`);
+  return light > 0;
+}
+
+async function getDimmingLevel(uniqueId: string) {
+  return currentBrightnessRatio[uniqueId];
+}
+
+async function toggleLight(uniqueId: string) {
+  control_light(uniqueId, -1);
+}
+
+async function setDimmingLevel(uniqueId: string, level: number) {
+  control_dimming(uniqueId, level);
+}
+
 export default light;
-export { getLights };
+export {
+  getLights,
+  isLightTurnedOn,
+  getDimmingLevel,
+  toggleLight,
+  setDimmingLevel,
+};

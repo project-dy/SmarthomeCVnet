@@ -4,6 +4,8 @@ import type {
   Service,
 } from "homebridge";
 
+import { isLightTurnedOn, setDimmingLevel, toggleLight } from "./light.js";
+
 import type { SmarthomeCVnetPlugin } from "./platform.js";
 
 /**
@@ -11,14 +13,14 @@ import type { SmarthomeCVnetPlugin } from "./platform.js";
  * An instance of this class is created for each accessory your platform registers
  * Each accessory may expose multiple services of different service types.
  */
-export class SmarthomeCVnetAccessory {
+export class SmarthomeCVnetAccessoryBulb {
   private service: Service;
 
   /**
    * These are just used to create a working example
    * You should implement your own code to track the state of your accessory
    */
-  private exampleStates = {
+  private States = {
     On: false,
     Brightness: 100,
   };
@@ -50,7 +52,7 @@ export class SmarthomeCVnetAccessory {
     // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
     this.service.setCharacteristic(
       this.platform.Characteristic.Name,
-      accessory.context.device.exampleDisplayName,
+      accessory.context.device.DisplayName,
     );
 
     // each service must implement at-minimum the "required characteristics" for the given service type
@@ -61,73 +63,6 @@ export class SmarthomeCVnetAccessory {
       .getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.setOn.bind(this)) // SET - bind to the `setOn` method below
       .onGet(this.getOn.bind(this)); // GET - bind to the `getOn` method below
-
-    // register handlers for the Brightness Characteristic
-    this.service
-      .getCharacteristic(this.platform.Characteristic.Brightness)
-      .onSet(this.setBrightness.bind(this)); // SET - bind to the `setBrightness` method below
-
-    // /**
-    //  * Creating multiple services of the same type.
-    //  *
-    //  * To avoid "Cannot add a Service with the same UUID another Service without also defining a unique 'subtype' property." error,
-    //  * when creating multiple services of the same type, you need to use the following syntax to specify a name and subtype id:
-    //  * this.accessory.getService('NAME') || this.accessory.addService(this.platform.Service.Lightbulb, 'NAME', 'USER_DEFINED_SUBTYPE_ID');
-    //  *
-    //  * The USER_DEFINED_SUBTYPE must be unique to the platform accessory (if you platform exposes multiple accessories, each accessory
-    //  * can use the same subtype id.)
-    //  */
-
-    // // Example: add two "motion sensor" services to the accessory
-    // const motionSensorOneService =
-    //   this.accessory.getService("Motion Sensor One Name") ||
-    //   this.accessory.addService(
-    //     this.platform.Service.MotionSensor,
-    //     "Motion Sensor One Name",
-    //     "YourUniqueIdentifier-1",
-    //   );
-
-    // const motionSensorTwoService =
-    //   this.accessory.getService("Motion Sensor Two Name") ||
-    //   this.accessory.addService(
-    //     this.platform.Service.MotionSensor,
-    //     "Motion Sensor Two Name",
-    //     "YourUniqueIdentifier-2",
-    //   );
-
-    // /**
-    //  * Updating characteristics values asynchronously.
-    //  *
-    //  * Example showing how to update the state of a Characteristic asynchronously instead
-    //  * of using the `on('get')` handlers.
-    //  * Here we change update the motion sensor trigger states on and off every 10 seconds
-    //  * the `updateCharacteristic` method.
-    //  *
-    //  */
-    // let motionDetected = false;
-    // setInterval(() => {
-    //   // EXAMPLE - inverse the trigger
-    //   motionDetected = !motionDetected;
-
-    //   // push the new value to HomeKit
-    //   motionSensorOneService.updateCharacteristic(
-    //     this.platform.Characteristic.MotionDetected,
-    //     motionDetected,
-    //   );
-    //   motionSensorTwoService.updateCharacteristic(
-    //     this.platform.Characteristic.MotionDetected,
-    //     !motionDetected,
-    //   );
-
-    //   this.platform.log.debug(
-    //     "Triggering motionSensorOneService:",
-    //     motionDetected,
-    //   );
-    //   this.platform.log.debug(
-    //     "Triggering motionSensorTwoService:",
-    //     !motionDetected,
-    //   );
-    // }, 10000);
   }
 
   /**
@@ -136,7 +71,12 @@ export class SmarthomeCVnetAccessory {
    */
   async setOn(value: CharacteristicValue) {
     // implement your own code to turn your device on/off
-    this.exampleStates.On = value as boolean;
+    this.States.On = value as boolean;
+
+    const uuid = this.accessory.context.device.UniqueId;
+    const zone = uuid.charCodeAt(1) - 65;
+    const room = uuid.charCodeAt(3) - 65;
+    toggleLight(`${zone}-${room}`);
 
     this.platform.log.debug("Set Characteristic On ->", value);
   }
@@ -157,8 +97,14 @@ export class SmarthomeCVnetAccessory {
    * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
    */
   async getOn(): Promise<CharacteristicValue> {
+    // console.log(JSON.stringify(this.accessory.context, null, 2));
+    const uuid = this.accessory.context.device.UniqueId;
+    const zone = uuid.charCodeAt(1) - 65;
+    const room = uuid.charCodeAt(3) - 65;
+    console.log(`uuid: ${uuid} zone: ${zone}, room: ${room}`);
     // implement your own code to check if the device is on
-    const isOn = this.exampleStates.On;
+    // const isOn = this.States.On;
+    const isOn = await isLightTurnedOn(`${zone}-${room}`);
 
     this.platform.log.debug("Get Characteristic On ->", isOn);
 
@@ -166,17 +112,6 @@ export class SmarthomeCVnetAccessory {
     // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
 
     return isOn;
-  }
-
-  /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, changing the Brightness
-   */
-  async setBrightness(value: CharacteristicValue) {
-    // implement your own code to set the brightness
-    this.exampleStates.Brightness = value as number;
-
-    this.platform.log.debug("Set Characteristic Brightness -> ", value);
   }
 }
 
@@ -240,68 +175,6 @@ export class SmarthomeCVnetAccessoryBulbBrightness {
     this.service
       .getCharacteristic(this.platform.Characteristic.Brightness)
       .onSet(this.setBrightness.bind(this)); // SET - bind to the `setBrightness` method below
-
-    // /**
-    //  * Creating multiple services of the same type.
-    //  *
-    //  * To avoid "Cannot add a Service with the same UUID another Service without also defining a unique 'subtype' property." error,
-    //  * when creating multiple services of the same type, you need to use the following syntax to specify a name and subtype id:
-    //  * this.accessory.getService('NAME') || this.accessory.addService(this.platform.Service.Lightbulb, 'NAME', 'USER_DEFINED_SUBTYPE_ID');
-    //  *
-    //  * The USER_DEFINED_SUBTYPE must be unique to the platform accessory (if you platform exposes multiple accessories, each accessory
-    //  * can use the same subtype id.)
-    //  */
-
-    // // Example: add two "motion sensor" services to the accessory
-    // const motionSensorOneService =
-    //   this.accessory.getService("Motion Sensor One Name") ||
-    //   this.accessory.addService(
-    //     this.platform.Service.MotionSensor,
-    //     "Motion Sensor One Name",
-    //     "YourUniqueIdentifier-1",
-    //   );
-
-    // const motionSensorTwoService =
-    //   this.accessory.getService("Motion Sensor Two Name") ||
-    //   this.accessory.addService(
-    //     this.platform.Service.MotionSensor,
-    //     "Motion Sensor Two Name",
-    //     "YourUniqueIdentifier-2",
-    //   );
-
-    // /**
-    //  * Updating characteristics values asynchronously.
-    //  *
-    //  * Example showing how to update the state of a Characteristic asynchronously instead
-    //  * of using the `on('get')` handlers.
-    //  * Here we change update the motion sensor trigger states on and off every 10 seconds
-    //  * the `updateCharacteristic` method.
-    //  *
-    //  */
-    // let motionDetected = false;
-    // setInterval(() => {
-    //   // EXAMPLE - inverse the trigger
-    //   motionDetected = !motionDetected;
-
-    //   // push the new value to HomeKit
-    //   motionSensorOneService.updateCharacteristic(
-    //     this.platform.Characteristic.MotionDetected,
-    //     motionDetected,
-    //   );
-    //   motionSensorTwoService.updateCharacteristic(
-    //     this.platform.Characteristic.MotionDetected,
-    //     !motionDetected,
-    //   );
-
-    //   this.platform.log.debug(
-    //     "Triggering motionSensorOneService:",
-    //     motionDetected,
-    //   );
-    //   this.platform.log.debug(
-    //     "Triggering motionSensorTwoService:",
-    //     !motionDetected,
-    //   );
-    // }, 10000);
   }
 
   /**
@@ -311,6 +184,11 @@ export class SmarthomeCVnetAccessoryBulbBrightness {
   async setOn(value: CharacteristicValue) {
     // implement your own code to turn your device on/off
     this.States.On = value as boolean;
+
+    const uuid = this.accessory.context.device.UniqueId;
+    const zone = uuid.charCodeAt(1) - 65;
+    const room = uuid.charCodeAt(3) - 65;
+    toggleLight(`${zone}-${room}`);
 
     this.platform.log.debug("Set Characteristic On ->", value);
   }
@@ -331,8 +209,14 @@ export class SmarthomeCVnetAccessoryBulbBrightness {
    * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
    */
   async getOn(): Promise<CharacteristicValue> {
+    // console.log(JSON.stringify(this.accessory.context, null, 2));
+    const uuid = this.accessory.context.device.UniqueId;
+    const zone = uuid.charCodeAt(1) - 65;
+    const room = uuid.charCodeAt(3) - 65;
+    console.log(`uuid: ${uuid} zone: ${zone}, room: ${room}`);
     // implement your own code to check if the device is on
-    const isOn = this.States.On;
+    // const isOn = this.States.On;
+    const isOn = await isLightTurnedOn(`${zone}-${room}`);
 
     this.platform.log.debug("Get Characteristic On ->", isOn);
 
@@ -349,6 +233,19 @@ export class SmarthomeCVnetAccessoryBulbBrightness {
   async setBrightness(value: CharacteristicValue) {
     // implement your own code to set the brightness
     this.States.Brightness = value as number;
+
+    const uuid = this.accessory.context.device.UniqueId;
+    const zone = uuid.charCodeAt(1) - 65;
+    const room = uuid.charCodeAt(3) - 65;
+    let dimming = value as number; // Three levels. 33, 66, 100
+    if (dimming < 33) {
+      dimming = 1;
+    } else if (dimming < 66) {
+      dimming = 2;
+    } else {
+      dimming = 3;
+    }
+    setDimmingLevel(`${zone}-${room}`, dimming);
 
     this.platform.log.debug("Set Characteristic Brightness -> ", value);
   }
